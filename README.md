@@ -1,0 +1,69 @@
+# sitegen
+
+sitegen turns a folder of Markdown files with simple front matter into a static blog. It writes a `public/` folder with an index (newest first, paginated), one page per post, per-tag pages, an Atom feed, a sitemap and your static assets.
+
+## Who it is for
+
+People who want a small, readable blog generator with one runtime dependency and no templating language to learn.
+
+## Built with
+
+Python 3.11+, the [`markdown`](https://pypi.org/project/Markdown/) package (fenced code and tables extensions), and the standard library (`tomllib`, `http.server`, `xml.etree`). Front matter is parsed by hand; there is no PyYAML or Jinja.
+
+## Install
+
+```
+pip install git+https://github.com/Chad9100/sitegen.git
+```
+
+## Quick start
+
+```
+sitegen init myblog
+sitegen build myblog
+sitegen serve myblog      # http://localhost:8000/
+```
+
+`init` creates `sitegen.toml` and two example posts. Add `--drafts` to `build` or `serve` to include drafts.
+
+## Config reference (`sitegen.toml`)
+
+| Key | Default | Meaning |
+|---|---|---|
+| `title` | `My Site` | Site title (HTML-escaped) |
+| `base_url` | `http://localhost:8000` | Absolute URL used in the feed and sitemap |
+| `theme` | `light` | `light` or `dark` |
+| `posts_per_page` | `5` | Posts per index/tag page (positive integer) |
+
+## Front matter reference
+
+```
+---
+title: My post
+date: 2026-03-04
+tags: [python, notes]
+draft: false
+slug: my-post
+---
+```
+
+- `title`: defaults to the file name.
+- `date`: required, `YYYY-MM-DD` (or ISO date-time).
+- `tags`: `[a, b]` or `a, b`.
+- `draft`: `true`/`false`; drafts are skipped unless `--drafts`.
+- `slug`: optional; always sanitized to `[a-z0-9-]`, so output cannot leave `public/`.
+
+Layout: Markdown anywhere in the site folder (except `public/`, `templates/`, `static/`, hidden folders). Files in `static/` are copied to `public/static/`.
+
+Custom templates: put `base.html`, `list.html` and/or `post.html` in a local `templates/` folder. They use `{{ var }}` substitution (`title`, `site_title`, `root`, `feed_url`, `css`, `content` in base; `heading`, `items`, `pager` in list; `title`, `date`, `tags`, `body` in post). Unknown variables render empty.
+
+## Development
+
+```
+python -m venv .venv
+.venv/Scripts/activate        # or: source .venv/bin/activate
+pip install -e ".[dev]"
+pytest -q
+```
+
+MIT licensed. See [ROADMAP.md](ROADMAP.md).
