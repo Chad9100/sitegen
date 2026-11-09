@@ -20,11 +20,20 @@ pip install git+https://github.com/Chad9100/sitegen.git
 
 ```
 sitegen init myblog
+sitegen new "Notes on sourdough" -C myblog --tags food,notes
+sitegen serve myblog --drafts   # http://localhost:8000/
 sitegen build myblog
-sitegen serve myblog      # http://localhost:8000/
 ```
 
 `init` creates `sitegen.toml` and two example posts. Add `--drafts` to `build` or `serve` to include drafts.
+
+### Writing a new post
+
+`sitegen new "Title"` creates `posts/YYYY-MM-DD-title.md` with the front matter filled
+in. It's a draft by default, so a half-written post never gets published by accident:
+preview it with `serve --drafts`, then delete the `draft: true` line when it's ready.
+Options: `-C FOLDER` (site folder, default current), `--tags a,b`, `--date YYYY-MM-DD`
+(default today) and `--no-draft`. It never overwrites an existing file.
 
 ## Config reference (`sitegen.toml`)
 
