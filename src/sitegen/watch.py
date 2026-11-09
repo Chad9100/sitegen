@@ -80,7 +80,8 @@ class Watcher:
         try:
             self.rebuild()
         except BuildError as e:
-            self.log(f"Build failed after change to {describe(changed)}: {e}\n"
+            # The error starts with its own file:line, so give it a line of its own.
+            self.log(f"Build failed after change to {describe(changed)}:\n{e}\n"
                      "  (still serving the last good build)")
             return False
         except OSError as e:

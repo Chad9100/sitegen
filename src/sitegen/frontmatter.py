@@ -8,7 +8,17 @@ from datetime import date, datetime, timezone
 
 
 class FrontMatterError(ValueError):
-    """Raised when front matter is malformed."""
+    """Raised when front matter is malformed.
+
+    ``line`` is the 1-based line number in the file (None when unknown) and
+    ``text`` is that line as written, so callers can point at the problem.
+    ``str(error)`` is just the message.
+    """
+
+    def __init__(self, message: str, line: int | None = None, text: str | None = None):
+        super().__init__(message)
+        self.line = line
+        self.text = text
 
 
 @dataclass
@@ -19,6 +29,8 @@ class Meta:
     draft: bool = False
     slug: str = ""
     extra: dict[str, str] = field(default_factory=dict)
+    # key -> 1-based line in the file where it was set (for error messages)
+    lines: dict[str, int] = field(default_factory=dict)
 
 
 def slugify(text: str, fallback: str = "post") -> str:
@@ -65,7 +77,10 @@ def parse_date(value: str) -> datetime:
             d = date.fromisoformat(v)
             return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
         dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
-    except ValueError:
+    except ValueError as e:
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", v):
+            # Right shape, impossible day: say why rather than repeat the format.
+            raise FrontMatterError(f"invalid date: {value!r} ({e})") from None
         raise FrontMatterError(f"invalid date: {value!r} (use YYYY-MM-DD)") from None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
@@ -81,30 +96,46 @@ def split_front_matter(text: str) -> tuple[str, str]:
     for i in range(1, len(lines)):
         if lines[i].strip() == "---":
             return "\n".join(lines[1:i]), "\n".join(lines[i + 1:])
-    raise FrontMatterError("front matter is not closed with '---'")
+    raise FrontMatterError(
+        "front matter opened here is never closed: add a line with just '---' "
+        "after the last 'key: value' line", line=1, text=lines[0])
 
 
 def parse(text: str) -> tuple[Meta, str]:
     block, body = split_front_matter(text)
     meta = Meta()
-    for raw in block.split("\n"):
+    if not block:
+        return meta, body
+    # The block starts on file line 2 (line 1 is the opening '---').
+    for lineno, raw in enumerate(block.split("\n"), start=2):
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
         if ":" not in line:
-            raise FrontMatterError(f"expected 'key: value', got {line!r}")
+            raise FrontMatterError(
+                f"expected 'key: value', got {line!r} (each field must fit on one "
+                "line, and the front matter ends with a '---' line)",
+                line=lineno, text=raw)
         key, _, value = line.partition(":")
         key = key.strip().lower()
-        if key == "title":
-            meta.title = _unquote(value)
-        elif key == "date":
-            meta.date = parse_date(value)
-        elif key == "tags":
-            meta.tags = parse_tags(value)
-        elif key == "draft":
-            meta.draft = parse_bool(value)
-        elif key == "slug":
-            meta.slug = _unquote(value)
-        else:
-            meta.extra[key] = _unquote(value)
+        try:
+            _set_field(meta, key, value.strip())
+        except FrontMatterError as e:
+            raise FrontMatterError(str(e), line=lineno, text=raw) from None
+        meta.lines[key] = lineno
     return meta, body
+
+
+def _set_field(meta: Meta, key: str, value: str) -> None:
+    if key == "title":
+        meta.title = _unquote(value)
+    elif key == "date":
+        meta.date = parse_date(value)
+    elif key == "tags":
+        meta.tags = parse_tags(value)
+    elif key == "draft":
+        meta.draft = parse_bool(value)
+    elif key == "slug":
+        meta.slug = _unquote(value)
+    else:
+        meta.extra[key] = _unquote(value)

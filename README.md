@@ -42,18 +42,40 @@ file in `static/` is added, changed or deleted (it checks every 0.5s; change tha
 `--interval SECONDS`, or turn it off with `--no-watch`). Reload the browser to see the
 result. If a change breaks the build, the error is printed and the last good build
 keeps being served until you fix it. A real session (adding a post with `sitegen new`,
-then breaking and fixing its `date:` line):
+then typing an impossible date and fixing it):
 
 ```
 $ sitegen serve myblog --port 8765
 Serving myblog\public at http://localhost:8765/ (Ctrl+C to stop)
 Watching myblog for changes (--no-watch to turn off)
-Rebuilt in 0.02s (1 changed: posts/2026-11-09-notes-on-sourdough.md)
-127.0.0.1 - - [09/Nov/2026 16:22:53] "GET / HTTP/1.1" 200 -
-Build failed after change to posts/2026-11-09-notes-on-sourdough.md: 2026-11-09-notes-on-sourdough.md: missing 'date' in front matter
+Rebuilt in 0.06s (1 changed: posts/2026-11-09-notes-on-sourdough.md)
+Build failed after change to posts/2026-11-09-notes-on-sourdough.md:
+posts/2026-11-09-notes-on-sourdough.md:3: invalid date: '2026-11-31' (day is out of range for month)
+     3 | date: 2026-11-31
   (still serving the last good build)
-127.0.0.1 - - [09/Nov/2026 16:22:54] "GET / HTTP/1.1" 200 -
 Rebuilt in 0.02s (1 changed: posts/2026-11-09-notes-on-sourdough.md)
+```
+
+### When something is wrong
+
+Errors name the file (relative to the site folder) and line as `file:line:`, the
+form most editors and terminals can jump to, and quote the offending line. That
+covers front matter (bad dates, `draft` values, unbalanced tag brackets, a line
+without `key: value`, front matter that is never closed), files that are not UTF-8
+(with the column of the bad byte), and `sitegen.toml` (TOML syntax errors, an unknown
+theme, a bad `posts_per_page`). A missing `date` suggests the likely typo. Real output:
+
+```
+$ sitegen build myblog
+error: posts/sourdough.md:3: invalid date: '2026-11-31' (day is out of range for month)
+     3 | date: 2026-11-31
+
+$ sitegen build myblog          # after mistyping the key as `dat:`
+error: posts/sourdough.md:3: missing 'date' in front matter; did you mean 'date' instead of 'dat'?
+
+$ sitegen build myblog          # with theme = "solarized" in sitegen.toml
+error: sitegen.toml:3: unknown theme 'solarized'; choose one of: light, dark
+     3 | theme = "solarized"
 ```
 
 ## Config reference (`sitegen.toml`)

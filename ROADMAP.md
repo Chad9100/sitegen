@@ -15,7 +15,7 @@
 - [x] `sitegen new "Title"` to create a dated post stub (1h)
 - [x] Rebuild-on-change for `serve` (2h)
 - [x] Reading time and post summaries/excerpts (1h)
-- [ ] Friendlier error messages with line numbers (2h)
+- [x] Friendlier error messages with line numbers (2h)
 
 ## v0.3: Content features (about 8 hours)
 

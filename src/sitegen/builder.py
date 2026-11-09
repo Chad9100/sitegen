@@ -1,7 +1,9 @@
 """Site building: config, post loading, page generation."""
 from __future__ import annotations
 
+import difflib
 import html
+import re
 import shutil
 import tomllib
 from dataclasses import dataclass
@@ -44,15 +46,46 @@ def esc(s: object) -> str:
     return html.escape(str(s), quote=True)
 
 
+def located(where: str, message: str, line: int | None = None,
+            text: str | None = None) -> str:
+    """Format an error as ``file:line: message`` plus the offending line.
+
+    The ``file:line:`` prefix is the form editors and terminals can jump to.
+    """
+    head = f"{where}:{line}: {message}" if line else f"{where}: {message}"
+    if line and text is not None:
+        head += f"\n  {line:>4} | {text.rstrip()}"
+    return head
+
+
+def _key_line(text: str, key: str) -> tuple[int | None, str | None]:
+    """Line number and text of the top-level ``key = ...`` in a TOML file."""
+    for n, raw in enumerate(text.splitlines(), start=1):
+        if raw.lstrip().startswith("["):
+            break  # past the top-level table
+        if re.match(rf"\s*{re.escape(key)}\s*=", raw):
+            return n, raw
+    return None, None
+
+
 def load_config(folder: Path) -> Config:
     cfg = Config()
     f = folder / "sitegen.toml"
     if not f.is_file():
         return cfg
+    text = f.read_text(encoding="utf-8")
     try:
-        data = tomllib.loads(f.read_text(encoding="utf-8"))
+        data = tomllib.loads(text)
     except tomllib.TOMLDecodeError as e:
-        raise BuildError(f"invalid sitegen.toml: {e}") from None
+        m = re.search(r"\(at line (\d+), column \d+\)", str(e))
+        line = int(m.group(1)) if m else None
+        lines = text.splitlines()
+        src = lines[line - 1] if line and line <= len(lines) else None
+        raise BuildError(located("sitegen.toml", f"invalid TOML: {e}", line, src)) from None
+
+    def bad(key: str, message: str) -> BuildError:
+        return BuildError(located("sitegen.toml", message, *_key_line(text, key)))
+
     if "title" in data:
         cfg.title = str(data["title"])
     if "base_url" in data:
@@ -62,10 +95,11 @@ def load_config(folder: Path) -> Config:
     if "posts_per_page" in data:
         ppp = data["posts_per_page"]
         if isinstance(ppp, bool) or not isinstance(ppp, int) or ppp < 1:
-            raise BuildError("posts_per_page must be a positive integer")
+            raise bad("posts_per_page",
+                      f"posts_per_page must be a positive integer, got {ppp!r}")
         cfg.posts_per_page = ppp
     if cfg.theme not in THEMES:
-        raise BuildError(f"unknown theme {cfg.theme!r}; choose one of: {', '.join(THEMES)}")
+        raise bad("theme", f"unknown theme {cfg.theme!r}; choose one of: {', '.join(THEMES)}")
     return cfg
 
 
@@ -98,14 +132,17 @@ def load_posts(folder: Path, drafts: bool = False) -> list[Post]:
     posts: list[Post] = []
     used: set[str] = set()
     for src in find_sources(folder):
+        where = src.relative_to(folder).as_posix()
         try:
             meta, body = frontmatter.parse(src.read_text(encoding="utf-8"))
-        except (FrontMatterError, UnicodeDecodeError) as e:
-            raise BuildError(f"{src.name}: {e}") from None
+        except FrontMatterError as e:
+            raise BuildError(located(where, str(e), e.line, e.text)) from None
+        except UnicodeDecodeError as e:
+            raise BuildError(decode_error(where, src, e)) from None
         if meta.draft and not drafts:
             continue
         if meta.date is None:
-            raise BuildError(f"{src.name}: missing 'date' in front matter")
+            raise BuildError(missing_date(where, meta))
         title = meta.title or src.stem
         base = slugify(meta.slug or title or src.stem)
         slug, n = base, 2
@@ -120,6 +157,24 @@ def load_posts(folder: Path, drafts: bool = False) -> list[Post]:
                           summary, src, reading_minutes(body_html)))
     posts.sort(key=lambda p: (p.date, p.slug), reverse=True)
     return posts
+
+
+def decode_error(where: str, src: Path, e: UnicodeDecodeError) -> str:
+    data = src.read_bytes()
+    line = data.count(b"\n", 0, e.start) + 1
+    column = e.start - (data.rfind(b"\n", 0, e.start) + 1) + 1
+    return located(where, f"not valid UTF-8 (byte 0x{data[e.start]:02x} at column "
+                          f"{column}); re-save the file as UTF-8", line)
+
+
+def missing_date(where: str, meta: frontmatter.Meta) -> str:
+    message = "missing 'date' in front matter"
+    typo = difflib.get_close_matches("date", list(meta.extra), n=1, cutoff=0.6)
+    if typo:
+        return located(where, f"{message}; did you mean 'date' instead of '{typo[0]}'?",
+                       meta.lines.get(typo[0]))
+    return located(where, f"{message} (add a line like 'date: 2026-01-10' "
+                          "between the '---' lines)")
 
 
 class Site:
