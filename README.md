@@ -53,6 +53,7 @@ date: 2026-03-04
 tags: [python, notes]
 draft: false
 slug: my-post
+summary: A one-line teaser for lists and the feed
 ---
 ```
 
@@ -61,10 +62,17 @@ slug: my-post
 - `tags`: `[a, b]` or `a, b`.
 - `draft`: `true`/`false`; drafts are skipped unless `--drafts`.
 - `slug`: optional; always sanitized to `[a-z0-9-]`, so output cannot leave `public/`.
+- `summary`: optional; the teaser shown under the post's title in lists and used in
+  the Atom feed. Without it, everything above a `<!--more-->` line in the post is used
+  as the summary. Without that either, the first paragraph is used, cut at a word
+  boundary after about 200 characters.
+
+Lists and post pages also show an estimated reading time ("3 min read", at about 200
+words per minute, never less than 1).
 
 Layout: Markdown anywhere in the site folder (except `public/`, `templates/`, `static/`, hidden folders). Files in `static/` are copied to `public/static/`.
 
-Custom templates: put `base.html`, `list.html` and/or `post.html` in a local `templates/` folder. They use `{{ var }}` substitution (`title`, `site_title`, `root`, `feed_url`, `css`, `content` in base; `heading`, `items`, `pager` in list; `title`, `date`, `tags`, `body` in post). Unknown variables render empty.
+Custom templates: put `base.html`, `list.html` and/or `post.html` in a local `templates/` folder. They use `{{ var }}` substitution (`title`, `site_title`, `root`, `feed_url`, `css`, `content` in base; `heading`, `items`, `pager` in list; `title`, `date`, `reading_time`, `summary`, `tags`, `body` in post). Unknown variables render empty.
 
 ## Development
 

@@ -2,3 +2,4 @@ body{font-family:system-ui,sans-serif;max-width:42rem;margin:2rem auto;padding:0
 a{color:#7ab7ff}header{border-bottom:1px solid #333;margin-bottom:1.5rem}.site{font-weight:bold;font-size:1.3rem;text-decoration:none}
 pre{background:#22252c;padding:.8rem;overflow:auto}table{border-collapse:collapse}td,th{border:1px solid #444;padding:.3rem .6rem}
 .meta,footer{color:#999;font-size:.9rem}.tag{margin-right:.4rem}
+.posts li{margin-bottom:.8rem}.summary{margin:.2rem 0 0}

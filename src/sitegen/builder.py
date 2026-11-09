@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 import html
-import re
 import shutil
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
 from . import feed, frontmatter
+from .excerpt import MORE, reading_minutes, summarize
 from .frontmatter import FrontMatterError, slugify
 from .render import fill, render_markdown
 from .themes import THEMES, load_templates
@@ -37,6 +37,7 @@ class Post:
     body_html: str
     summary: str
     source: Path
+    minutes: int = 1
 
 
 def esc(s: object) -> str:
@@ -93,11 +94,6 @@ def find_sources(folder: Path) -> list[Path]:
     return out
 
 
-def _summary(body_html: str) -> str:
-    text = html.unescape(re.sub(r"<[^>]+>", " ", body_html))
-    return " ".join(text.split())[:200]
-
-
 def load_posts(folder: Path, drafts: bool = False) -> list[Post]:
     posts: list[Post] = []
     used: set[str] = set()
@@ -117,8 +113,11 @@ def load_posts(folder: Path, drafts: bool = False) -> list[Post]:
             slug, n = f"{base}-{n}", n + 1
         used.add(slug)
         body_html = render_markdown(body)
+        parts = MORE.split(body, maxsplit=1)
+        before_more = render_markdown(parts[0]) if len(parts) == 2 else None
+        summary = summarize(body_html, before_more, meta.extra.get("summary"))
         posts.append(Post(title, slug, meta.date, meta.tags, body_html,
-                          _summary(body_html), src))
+                          summary, src, reading_minutes(body_html)))
     posts.sort(key=lambda p: (p.date, p.slug), reverse=True)
     return posts
 
@@ -156,7 +155,9 @@ class Site:
             root = "../" * depth or "./"
             items = "\n".join(
                 f'<li><a href="{root}posts/{p.slug}/">{esc(p.title)}</a> '
-                f'<span class="meta">{p.date:%Y-%m-%d}</span></li>'
+                f'<span class="meta">{p.date:%Y-%m-%d} · {p.minutes} min read</span>'
+                + (f'\n<p class="summary">{esc(p.summary)}</p>' if p.summary else "")
+                + "</li>"
                 for p in posts[(n - 1) * per:n * per])
             nav = []
             if n > 1:
@@ -179,6 +180,7 @@ class Site:
             root = "../../"
             content = fill(self.tpl["post"], {
                 "title": esc(p.title), "date": f"{p.date:%Y-%m-%d}",
+                "reading_time": f"{p.minutes} min read", "summary": esc(p.summary),
                 "tags": self.tag_links(p.tags, root), "body": p.body_html})
             write(self.out, f"posts/{p.slug}/index.html", self.page(p.title, content, 2))
         for slug, (name, plist) in self.tags.items():
