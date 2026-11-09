@@ -11,6 +11,7 @@ from pathlib import Path
 from . import __version__, frontmatter
 from .builder import BuildError, build
 from .frontmatter import FrontMatterError, slugify
+from .watch import Watcher
 
 CONFIG = """title = "My Sitegen Blog"
 base_url = "http://localhost:8000"
@@ -127,15 +128,37 @@ def cmd_build(args) -> int:
 
 
 def cmd_serve(args) -> int:
-    out = build(Path(args.folder), drafts=args.drafts)
+    folder = Path(args.folder)
+    out = build(folder, drafts=args.drafts)
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(out))
+    watcher = None
+    if args.watch:
+        watcher = Watcher(folder, lambda: build(folder, drafts=args.drafts),
+                          interval=args.interval, log=lambda msg: print(msg, flush=True))
     with http.server.ThreadingHTTPServer(("127.0.0.1", args.port), handler) as srv:
         print(f"Serving {out} at http://localhost:{args.port}/ (Ctrl+C to stop)")
+        if watcher:
+            print(f"Watching {folder} for changes (--no-watch to turn off)")
+            watcher.start()
+        sys.stdout.flush()
         try:
             srv.serve_forever()
         except KeyboardInterrupt:
             print("\nStopped.")
+        finally:
+            if watcher:
+                watcher.stop()
     return 0
+
+
+def positive_float(text: str) -> float:
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a number: {text!r}") from None
+    if not value > 0:
+        raise argparse.ArgumentTypeError("must be greater than 0")
+    return value
 
 
 def make_parser() -> argparse.ArgumentParser:
@@ -161,6 +184,11 @@ def make_parser() -> argparse.ArgumentParser:
         s.add_argument("--drafts", action="store_true", help="include draft posts")
         if name == "serve":
             s.add_argument("--port", type=int, default=8000)
+            s.add_argument("--watch", action=argparse.BooleanOptionalAction, default=True,
+                           help="rebuild when posts, sitegen.toml, templates or static "
+                                "files change (default); --no-watch builds once")
+            s.add_argument("--interval", type=positive_float, default=0.5, metavar="SECONDS",
+                           help="how often to check for changes (default: 0.5)")
         s.set_defaults(func=fn)
     return p
 

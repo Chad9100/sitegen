@@ -35,6 +35,27 @@ preview it with `serve --drafts`, then delete the `draft: true` line when it's r
 Options: `-C FOLDER` (site folder, default current), `--tags a,b`, `--date YYYY-MM-DD`
 (default today) and `--no-draft`. It never overwrites an existing file.
 
+### Live rebuilds while you write
+
+`sitegen serve` rebuilds the site whenever a post, `sitegen.toml`, a template or a
+file in `static/` is added, changed or deleted (it checks every 0.5s; change that with
+`--interval SECONDS`, or turn it off with `--no-watch`). Reload the browser to see the
+result. If a change breaks the build, the error is printed and the last good build
+keeps being served until you fix it. A real session (adding a post with `sitegen new`,
+then breaking and fixing its `date:` line):
+
+```
+$ sitegen serve myblog --port 8765
+Serving myblog\public at http://localhost:8765/ (Ctrl+C to stop)
+Watching myblog for changes (--no-watch to turn off)
+Rebuilt in 0.02s (1 changed: posts/2026-11-09-notes-on-sourdough.md)
+127.0.0.1 - - [09/Nov/2026 16:22:53] "GET / HTTP/1.1" 200 -
+Build failed after change to posts/2026-11-09-notes-on-sourdough.md: 2026-11-09-notes-on-sourdough.md: missing 'date' in front matter
+  (still serving the last good build)
+127.0.0.1 - - [09/Nov/2026 16:22:54] "GET / HTTP/1.1" 200 -
+Rebuilt in 0.02s (1 changed: posts/2026-11-09-notes-on-sourdough.md)
+```
+
 ## Config reference (`sitegen.toml`)
 
 | Key | Default | Meaning |
