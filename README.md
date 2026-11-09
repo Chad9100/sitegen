@@ -1,6 +1,6 @@
 # sitegen
 
-sitegen turns a folder of Markdown files with simple front matter into a static blog. It writes a `public/` folder with an index (newest first, paginated), one page per post, per-tag pages, an Atom feed, a sitemap and your static assets.
+sitegen turns a folder of Markdown files with simple front matter into a static blog. It writes a `public/` folder with an index (newest first, paginated), one page per post, per-tag pages, standalone pages such as About and Contact, an Atom feed, a sitemap and your static assets.
 
 ## Who it is for
 
@@ -25,7 +25,7 @@ sitegen serve myblog --drafts   # http://localhost:8000/
 sitegen build myblog
 ```
 
-`init` creates `sitegen.toml` and two example posts. Add `--drafts` to `build` or `serve` to include drafts.
+`init` creates `sitegen.toml`, two example posts and an About page. Add `--drafts` to `build` or `serve` to include drafts.
 
 ### Writing a new post
 
@@ -54,6 +54,47 @@ posts/2026-11-09-notes-on-sourdough.md:3: invalid date: '2026-11-31' (day is out
      3 | date: 2026-11-31
   (still serving the last good build)
 Rebuilt in 0.02s (1 changed: posts/2026-11-09-notes-on-sourdough.md)
+```
+
+### Standalone pages (About, Contact)
+
+Every `.md` file directly inside a top-level `pages/` folder becomes a page at
+`/<file-name>/` (so `pages/about.md` is `/about/`). Pages need no `date`, never appear
+in the post list, tag pages or the Atom feed, but are in the sitemap and linked from
+the header of every page (the current one marked `aria-current="page"`). Front matter:
+
+- `title`: the page heading and nav label (defaults to the file name).
+- `slug`: optional URL override, sanitized like post slugs.
+- `order`: whole number; nav links sort by `order` (default 0), then title.
+- `nav: false`: build the page but leave it out of the header (e.g. an imprint).
+- `draft: true`: skipped unless `--drafts`.
+
+Real output, after adding `pages/contact.md` (`order: 1`) and `pages/imprint.md`
+(`nav: false`) to a site made with `sitegen init pagesdemo`:
+
+```
+$ sitegen build pagesdemo
+Built site into pagesdemo\public
+$ ls pagesdemo/public
+about
+atom.xml
+contact
+imprint
+index.html
+posts
+sitemap.xml
+tags
+$ grep '<nav' pagesdemo/public/index.html pagesdemo/public/contact/index.html
+pagesdemo/public/index.html:<nav class="pages"><a href="./about/">About</a> <a href="./contact/">Contact</a></nav></header>
+pagesdemo/public/contact/index.html:<nav class="pages"><a href="../about/">About</a> <a href="../contact/" aria-current="page">Contact</a></nav></header>
+```
+
+A page may not take over sitegen's own folders (`posts`, `tags`, `page`, `static`),
+and two pages may not share a slug:
+
+```
+$ sitegen build pagesdemo       # with slug: tags in pages/tag-list.md
+error: pages/tag-list.md:3: page slug 'tags' would replace sitegen's own /tags/ folder; rename the file or set another 'slug:'
 ```
 
 ### When something is wrong
@@ -113,9 +154,9 @@ summary: A one-line teaser for lists and the feed
 Lists and post pages also show an estimated reading time ("3 min read", at about 200
 words per minute, never less than 1).
 
-Layout: Markdown anywhere in the site folder (except `public/`, `templates/`, `static/`, hidden folders). Files in `static/` are copied to `public/static/`.
+Layout: posts are Markdown anywhere in the site folder (except `public/`, `templates/`, `static/`, `pages/`, hidden folders); pages are `pages/*.md`. Files in `static/` are copied to `public/static/`.
 
-Custom templates: put `base.html`, `list.html` and/or `post.html` in a local `templates/` folder. They use `{{ var }}` substitution (`title`, `site_title`, `root`, `feed_url`, `css`, `content` in base; `heading`, `items`, `pager` in list; `title`, `date`, `reading_time`, `summary`, `tags`, `body` in post). Unknown variables render empty.
+Custom templates: put `base.html`, `list.html`, `post.html` and/or `page.html` in a local `templates/` folder. They use `{{ var }}` substitution (`title`, `site_title`, `root`, `feed_url`, `css`, `content`, `nav` in base; `heading`, `items`, `pager` in list; `title`, `date`, `reading_time`, `summary`, `tags`, `body` in post; `title`, `body` in page). Unknown variables render empty.
 
 ## Development
 

@@ -49,6 +49,12 @@ The basil is doing well; the mint is taking over.
 | Basil | thriving |
 | Mint  | wild     |
 """,
+    "pages/about.md": """---
+title: About
+---
+This blog is built with **sitegen**. Pages in `pages/` (like this one) get their
+own URL and a link in the header, but never appear in the post list or the feed.
+""",
 }
 
 

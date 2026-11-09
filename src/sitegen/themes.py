@@ -5,7 +5,7 @@ from importlib import resources
 from pathlib import Path
 
 THEMES = ("light", "dark")
-TEMPLATE_NAMES = ("base", "list", "post")
+TEMPLATE_NAMES = ("base", "list", "post", "page")
 
 
 def _builtin(name: str) -> str:

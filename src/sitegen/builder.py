@@ -16,6 +16,10 @@ from .render import fill, render_markdown
 from .themes import THEMES, load_templates
 
 SKIP_DIRS = {"public", "templates", "static", "node_modules"}
+# Top-level folder for standalone pages (About, Contact): not posts.
+PAGES_DIR = "pages"
+# Top-level output paths a page slug must not take over.
+RESERVED_SLUGS = {"posts", "tags", "page", "static"}
 
 
 class BuildError(Exception):
@@ -40,6 +44,17 @@ class Post:
     summary: str
     source: Path
     minutes: int = 1
+
+
+@dataclass
+class Page:
+    """A standalone page: no date, not in lists or the feed, linked from the header."""
+    title: str
+    slug: str
+    body_html: str
+    source: Path
+    order: int = 0
+    nav: bool = True
 
 
 def esc(s: object) -> str:
@@ -124,8 +139,66 @@ def find_sources(folder: Path) -> list[Path]:
         rel = p.relative_to(folder).parts
         if any(part in SKIP_DIRS or part.startswith(".") for part in rel[:-1]) or p.is_symlink():
             continue
+        if len(rel) > 1 and rel[0] == PAGES_DIR:
+            continue
         out.append(p)
     return out
+
+
+def read_source(folder: Path, src: Path) -> tuple[frontmatter.Meta, str]:
+    where = src.relative_to(folder).as_posix()
+    try:
+        return frontmatter.parse(src.read_text(encoding="utf-8"))
+    except FrontMatterError as e:
+        raise BuildError(located(where, str(e), e.line, e.text)) from None
+    except UnicodeDecodeError as e:
+        raise BuildError(decode_error(where, src, e)) from None
+
+
+def load_pages(folder: Path, drafts: bool = False) -> list[Page]:
+    """Load ``pages/*.md`` (top level only), ordered for the header nav."""
+    pages_dir = folder / PAGES_DIR
+    if not pages_dir.is_dir() or pages_dir.is_symlink():
+        return []
+    pages: list[Page] = []
+    owner: dict[str, str] = {}
+    for src in sorted(pages_dir.glob("*.md")):
+        if src.is_symlink() or not src.is_file():
+            continue
+        where = src.relative_to(folder).as_posix()
+        meta, body = read_source(folder, src)
+        if meta.draft and not drafts:
+            continue
+        title = meta.title or src.stem
+        slug = slugify(meta.slug or src.stem, "page")
+        if slug in RESERVED_SLUGS:
+            raise BuildError(located(
+                where, f"page slug {slug!r} would replace sitegen's own /{slug}/ "
+                       "folder; rename the file or set another 'slug:'",
+                meta.lines.get("slug")))
+        if slug in owner:
+            raise BuildError(located(
+                where, f"page slug {slug!r} is already used by {owner[slug]}; "
+                       "set a different 'slug:' in one of them", meta.lines.get("slug")))
+        owner[slug] = where
+        order, nav = 0, True
+        if "order" in meta.extra:
+            raw = meta.extra["order"]
+            try:
+                order = int(raw)
+            except ValueError:
+                raise BuildError(located(where, f"order must be a whole number, got {raw!r}",
+                                         meta.lines.get("order"))) from None
+        if "nav" in meta.extra:
+            try:
+                nav = frontmatter.parse_bool(meta.extra["nav"])
+            except FrontMatterError:
+                raise BuildError(located(
+                    where, f"nav must be true or false, got {meta.extra['nav']!r}",
+                    meta.lines.get("nav"))) from None
+        pages.append(Page(title, slug, render_markdown(body), src, order, nav))
+    pages.sort(key=lambda p: (p.order, p.title.lower(), p.slug))
+    return pages
 
 
 def load_posts(folder: Path, drafts: bool = False) -> list[Post]:
@@ -133,12 +206,7 @@ def load_posts(folder: Path, drafts: bool = False) -> list[Post]:
     used: set[str] = set()
     for src in find_sources(folder):
         where = src.relative_to(folder).as_posix()
-        try:
-            meta, body = frontmatter.parse(src.read_text(encoding="utf-8"))
-        except FrontMatterError as e:
-            raise BuildError(located(where, str(e), e.line, e.text)) from None
-        except UnicodeDecodeError as e:
-            raise BuildError(decode_error(where, src, e)) from None
+        meta, body = read_source(folder, src)
         if meta.draft and not drafts:
             continue
         if meta.date is None:
@@ -184,18 +252,29 @@ class Site:
         self.tpl = load_templates(self.cfg.theme, folder / "templates")
         self.out = folder / "public"
         self.posts = load_posts(folder, drafts)
+        self.pages = load_pages(folder, drafts)
         self.tags: dict[str, tuple[str, list[Post]]] = {}
         for p in self.posts:
             for t in p.tags:
                 slug = slugify(t, "tag")
                 self.tags.setdefault(slug, (t, []))[1].append(p)
 
-    def page(self, title: str, content: str, depth: int) -> str:
+    def page(self, title: str, content: str, depth: int, current: str = "") -> str:
         root = "../" * depth or "./"
         return fill(self.tpl["base"], {
             "title": esc(title), "site_title": esc(self.cfg.title), "root": root,
             "feed_url": root + "atom.xml", "css": self.tpl["css"], "content": content,
+            "nav": self.nav(root, current),
         })
+
+    def nav(self, root: str, current: str = "") -> str:
+        """Header links to the standalone pages (those without ``nav: false``)."""
+        links = [
+            f'<a href="{root}{p.slug}/"'
+            + (' aria-current="page"' if p.slug == current else "")
+            + f">{esc(p.title)}</a>"
+            for p in self.pages if p.nav]
+        return f'<nav class="pages">{" ".join(links)}</nav>' if links else ""
 
     def tag_links(self, tags: list[str], root: str) -> str:
         return " ".join(
@@ -240,12 +319,17 @@ class Site:
             write(self.out, f"posts/{p.slug}/index.html", self.page(p.title, content, 2))
         for slug, (name, plist) in self.tags.items():
             self.paginate(f"Tagged: {name}", plist, f"tags/{slug}/")
+        for pg in self.pages:
+            content = fill(self.tpl["page"], {"title": esc(pg.title), "body": pg.body_html})
+            write(self.out, f"{pg.slug}/index.html",
+                  self.page(pg.title, content, 1, current=pg.slug))
         base = self.cfg.base_url
         feed_posts = [{"title": p.title, "url": f"{base}/posts/{p.slug}/", "date": p.date,
                        "summary": p.summary, "tags": p.tags} for p in self.posts]
         write(self.out, "atom.xml", feed.build_atom(self.cfg.title, base, feed_posts))
         entries = [(base + "/", self.posts[0].date if self.posts else None)]
         entries += [(f"{base}/posts/{p.slug}/", p.date) for p in self.posts]
+        entries += [(f"{base}/{pg.slug}/", None) for pg in self.pages]
         entries += [(f"{base}/tags/{s}/", None) for s in self.tags]
         write(self.out, "sitemap.xml", feed.build_sitemap(entries))
         self.copy_static()
