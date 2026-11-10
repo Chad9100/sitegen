@@ -299,11 +299,27 @@ class Site:
                 nav.append(f'<a rel="prev" href="{root}{prev}">Newer</a>')
             if n < pages:
                 nav.append(f'<a rel="next" href="{root}{base}page/{n + 1}/">Older</a>')
+            if base.startswith("tags/"):
+                nav.append(f'<a href="{root}tags/">All tags</a>')
             pager = f'<nav class="pager">{" | ".join(nav)}</nav>' if nav else ""
             content = fill(self.tpl["list"], {"heading": esc(heading), "items": items,
                                               "pager": pager})
             rel = f"{base}index.html" if n == 1 else f"{base}page/{n}/index.html"
             write(self.out, rel, self.page(heading, content, depth))
+
+    def tag_index(self) -> None:
+        """``tags/index.html``: every tag with its post count, most used first."""
+        if not self.tags:
+            return
+        root = "../"
+        ranked = sorted(self.tags.items(),
+                        key=lambda kv: (-len(kv[1][1]), kv[1][0].lower(), kv[0]))
+        items = "\n".join(
+            f'<li><a class="tag" href="{root}tags/{slug}/">#{esc(name)}</a> '
+            f'<span class="meta">{len(plist)} post{"" if len(plist) == 1 else "s"}</span></li>'
+            for slug, (name, plist) in ranked)
+        content = fill(self.tpl["list"], {"heading": "Tags", "items": items, "pager": ""})
+        write(self.out, "tags/index.html", self.page("Tags", content, 1))
 
     def build(self) -> Path:
         if self.out.exists():
@@ -319,6 +335,7 @@ class Site:
             write(self.out, f"posts/{p.slug}/index.html", self.page(p.title, content, 2))
         for slug, (name, plist) in self.tags.items():
             self.paginate(f"Tagged: {name}", plist, f"tags/{slug}/")
+        self.tag_index()
         for pg in self.pages:
             content = fill(self.tpl["page"], {"title": esc(pg.title), "body": pg.body_html})
             write(self.out, f"{pg.slug}/index.html",
@@ -330,6 +347,8 @@ class Site:
         entries = [(base + "/", self.posts[0].date if self.posts else None)]
         entries += [(f"{base}/posts/{p.slug}/", p.date) for p in self.posts]
         entries += [(f"{base}/{pg.slug}/", None) for pg in self.pages]
+        if self.tags:
+            entries.append((f"{base}/tags/", None))
         entries += [(f"{base}/tags/{s}/", None) for s in self.tags]
         write(self.out, "sitemap.xml", feed.build_sitemap(entries))
         self.copy_static()

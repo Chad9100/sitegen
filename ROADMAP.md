@@ -20,7 +20,7 @@
 ## v0.3: Content features (about 8 hours)
 
 - [x] Standalone pages (About, Contact) outside the post list (2h)
-- [ ] Tag index page listing all tags with counts (1h)
+- [x] Tag index page listing all tags with counts (1h)
 - [ ] Per-tag Atom feeds (2h)
 - [ ] Syntax highlighting via Pygments as an optional extra (3h)
 

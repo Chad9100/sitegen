@@ -97,6 +97,32 @@ $ sitegen build pagesdemo       # with slug: tags in pages/tag-list.md
 error: pages/tag-list.md:3: page slug 'tags' would replace sitegen's own /tags/ folder; rename the file or set another 'slug:'
 ```
 
+### Tag index
+
+Every build with at least one tag also writes `public/tags/index.html`: all tags with
+their post counts, most used first (ties in alphabetical order). Each tag page links
+back to it with an "All tags" link, and it is listed in `sitemap.xml`. Drafts are not
+counted unless you build with `--drafts`. Real output from a demo site (`sitegen init`
+plus four `sitegen new` posts, built with `--drafts`):
+
+```
+$ sitegen build . --drafts
+Built site into public
+$ grep -A8 '<ul class="posts">' public/tags/index.html
+<ul class="posts">
+<li><a class="tag" href="../tags/food/">#food</a> <span class="meta">3 posts</span></li>
+<li><a class="tag" href="../tags/baking/">#baking</a> <span class="meta">2 posts</span></li>
+<li><a class="tag" href="../tags/notes/">#notes</a> <span class="meta">2 posts</span></li>
+<li><a class="tag" href="../tags/garden/">#garden</a> <span class="meta">1 post</span></li>
+<li><a class="tag" href="../tags/intro/">#intro</a> <span class="meta">1 post</span></li>
+<li><a class="tag" href="../tags/python/">#python</a> <span class="meta">1 post</span></li>
+</ul>
+$ grep pager public/tags/food/index.html
+<nav class="pager"><a href="../../tags/">All tags</a></nav>
+```
+
+It uses the `list.html` template (`heading` is "Tags", `pager` is empty).
+
 ### When something is wrong
 
 Errors name the file (relative to the site folder) and line as `file:line:`, the
