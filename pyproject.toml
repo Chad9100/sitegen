@@ -13,7 +13,8 @@ requires-python = ">=3.11"
 dependencies = ["markdown"]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+highlight = ["pygments"]
+dev = ["pytest", "pygments"]
 
 [project.scripts]
 sitegen = "sitegen.cli:main"

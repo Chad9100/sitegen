@@ -22,7 +22,7 @@
 - [x] Standalone pages (About, Contact) outside the post list (2h)
 - [x] Tag index page listing all tags with counts (1h)
 - [x] Per-tag Atom feeds (2h)
-- [ ] Syntax highlighting via Pygments as an optional extra (3h)
+- [x] Syntax highlighting via Pygments as an optional extra (3h)
 
 ## v0.4: Templates and themes (about 8 hours)
 

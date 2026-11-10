@@ -17,6 +17,9 @@ CONFIG = """title = "My Sitegen Blog"
 base_url = "http://localhost:8000"
 theme = "light"          # "light" or "dark"
 posts_per_page = 5
+# Code blocks are syntax highlighted when Pygments is installed
+# (pip install "sitegen[highlight]"). Any Pygments style works here:
+# highlight_style = "monokai"
 """
 
 POSTS = {
@@ -127,15 +130,19 @@ def cmd_new(args) -> int:
     return 0
 
 
+def note(message: str) -> None:
+    print(message, file=sys.stderr)
+
+
 def cmd_build(args) -> int:
-    out = build(Path(args.folder), drafts=args.drafts)
+    out = build(Path(args.folder), drafts=args.drafts, log=note)
     print(f"Built site into {out}")
     return 0
 
 
 def cmd_serve(args) -> int:
     folder = Path(args.folder)
-    out = build(folder, drafts=args.drafts)
+    out = build(folder, drafts=args.drafts, log=note)
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(out))
     watcher = None
     if args.watch:

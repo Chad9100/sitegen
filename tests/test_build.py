@@ -242,9 +242,11 @@ def test_default_light_theme(tmp_path):
 
 
 def test_markdown_fenced_code_and_tables(site):
+    with open(site / "sitegen.toml", "a", encoding="utf-8") as f:
+        f.write("highlight = false\n")  # plain fenced code; see test_highlight.py
     post(site, "a.md", title="Code", body="```py\nx = 1\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n")
     page = read(build(site) / "posts" / "code" / "index.html")
-    assert "<pre><code" in page and "<table>" in page
+    assert '<pre><code class="language-py">' in page and "<table>" in page
 
 
 def test_template_override(site):

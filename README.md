@@ -8,7 +8,7 @@ People who want a small, readable blog generator with one runtime dependency and
 
 ## Built with
 
-Python 3.11+, the [`markdown`](https://pypi.org/project/Markdown/) package (fenced code and tables extensions), and the standard library (`tomllib`, `http.server`, `xml.etree`). Front matter is parsed by hand; there is no PyYAML or Jinja.
+Python 3.11+, the [`markdown`](https://pypi.org/project/Markdown/) package (fenced code and tables extensions), optionally [Pygments](https://pygments.org/) for code highlighting, and the standard library (`tomllib`, `http.server`, `xml.etree`). Front matter is parsed by hand; there is no PyYAML or Jinja.
 
 ## Install
 
@@ -146,6 +146,44 @@ $ grep -E "atom|pager" public/tags/notes/index.html
 <nav class="pager"><a href="../../tags/">All tags</a> | <a class="feed" href="../../tags/notes/atom.xml">Atom feed</a></nav>
 ```
 
+### Syntax highlighting (optional)
+
+Install the `highlight` extra and fenced code blocks with a language
+(` ```python `) are highlighted by [Pygments](https://pygments.org/) at build time,
+with no JavaScript:
+
+```
+pip install "sitegen[highlight] @ git+https://github.com/Chad9100/sitegen.git"
+```
+
+The light theme uses Pygments' `default` style and the dark theme `monokai`; set
+`highlight_style` in `sitegen.toml` to any other style (`pygmentize -L styles` lists
+them). The style's CSS is added only to pages that contain highlighted code. A block
+without a language, or with one Pygments doesn't know, is shown as plain (escaped)
+text; the language is never guessed. Set `highlight = false` to turn it off. Without
+Pygments, sitegen works exactly as before: code blocks are plain
+`<pre><code class="language-python">`, ready for a client-side highlighter. Real
+output from a site made with `sitegen init` (its first post has a Python block):
+
+```
+$ sitegen build .
+Built site into public
+$ grep -A1 '<div class="codehilite">' public/posts/hello-world/index.html
+<div class="codehilite"><pre><span></span><code><span class="nb">print</span><span class="p">(</span><span class="s2">"hello"</span><span class="p">)</span>
+</code></pre></div>
+$ sitegen build .               # with highlight_style = "monokia" in sitegen.toml
+error: sitegen.toml:8: unknown Pygments style 'monokia'; did you mean 'monokai'?
+     8 | highlight_style = "monokia"
+```
+
+If `highlight_style` is set but Pygments is missing, the build still succeeds and
+says why the code is plain:
+
+```
+note: highlight_style is set but Pygments is not installed, so code blocks are not highlighted (pip install "sitegen[highlight]")
+Built site into public
+```
+
 ### When something is wrong
 
 Errors name the file (relative to the site folder) and line as `file:line:`, the
@@ -176,6 +214,8 @@ error: sitegen.toml:3: unknown theme 'solarized'; choose one of: light, dark
 | `base_url` | `http://localhost:8000` | Absolute URL used in the feed and sitemap |
 | `theme` | `light` | `light` or `dark` |
 | `posts_per_page` | `5` | Posts per index/tag page (positive integer) |
+| `highlight` | `true` | Highlight code blocks when Pygments is installed |
+| `highlight_style` | theme's | Pygments style (`default` for light, `monokai` for dark) |
 
 ## Front matter reference
 

@@ -9,7 +9,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import feed, frontmatter
+from . import feed, frontmatter, render
 from .excerpt import MORE, reading_minutes, summarize
 from .frontmatter import FrontMatterError, slugify
 from .render import fill, render_markdown
@@ -32,6 +32,8 @@ class Config:
     base_url: str = "http://localhost:8000"
     theme: str = "light"
     posts_per_page: int = 5
+    highlight: bool = True
+    highlight_style: str = ""  # empty: the theme's default style
 
 
 @dataclass
@@ -115,6 +117,21 @@ def load_config(folder: Path) -> Config:
         cfg.posts_per_page = ppp
     if cfg.theme not in THEMES:
         raise bad("theme", f"unknown theme {cfg.theme!r}; choose one of: {', '.join(THEMES)}")
+    if "highlight" in data:
+        if not isinstance(data["highlight"], bool):
+            raise bad("highlight", f"highlight must be true or false, got {data['highlight']!r}")
+        cfg.highlight = data["highlight"]
+    if "highlight_style" in data:
+        style = data["highlight_style"]
+        if not isinstance(style, str) or not style:
+            raise bad("highlight_style",
+                      f"highlight_style must be a Pygments style name, got {style!r}")
+        if render.HAVE_PYGMENTS and style not in render.highlight_styles():
+            close = difflib.get_close_matches(style, render.highlight_styles(), n=3)
+            hint = (f"did you mean {' or '.join(map(repr, close))}?" if close
+                    else "run `pygmentize -L styles` to list them")
+            raise bad("highlight_style", f"unknown Pygments style {style!r}; {hint}")
+        cfg.highlight_style = style
     return cfg
 
 
@@ -155,7 +172,7 @@ def read_source(folder: Path, src: Path) -> tuple[frontmatter.Meta, str]:
         raise BuildError(decode_error(where, src, e)) from None
 
 
-def load_pages(folder: Path, drafts: bool = False) -> list[Page]:
+def load_pages(folder: Path, drafts: bool = False, highlight: bool = False) -> list[Page]:
     """Load ``pages/*.md`` (top level only), ordered for the header nav."""
     pages_dir = folder / PAGES_DIR
     if not pages_dir.is_dir() or pages_dir.is_symlink():
@@ -196,12 +213,12 @@ def load_pages(folder: Path, drafts: bool = False) -> list[Page]:
                 raise BuildError(located(
                     where, f"nav must be true or false, got {meta.extra['nav']!r}",
                     meta.lines.get("nav"))) from None
-        pages.append(Page(title, slug, render_markdown(body), src, order, nav))
+        pages.append(Page(title, slug, render_markdown(body, highlight), src, order, nav))
     pages.sort(key=lambda p: (p.order, p.title.lower(), p.slug))
     return pages
 
 
-def load_posts(folder: Path, drafts: bool = False) -> list[Post]:
+def load_posts(folder: Path, drafts: bool = False, highlight: bool = False) -> list[Post]:
     posts: list[Post] = []
     used: set[str] = set()
     for src in find_sources(folder):
@@ -217,7 +234,7 @@ def load_posts(folder: Path, drafts: bool = False) -> list[Post]:
         while slug in used:
             slug, n = f"{base}-{n}", n + 1
         used.add(slug)
-        body_html = render_markdown(body)
+        body_html = render_markdown(body, highlight)
         parts = MORE.split(body, maxsplit=1)
         before_more = render_markdown(parts[0]) if len(parts) == 2 else None
         summary = summarize(body_html, before_more, meta.extra.get("summary"))
@@ -246,13 +263,20 @@ def missing_date(where: str, meta: frontmatter.Meta) -> str:
 
 
 class Site:
-    def __init__(self, folder: Path, drafts: bool = False):
+    def __init__(self, folder: Path, drafts: bool = False, log=None):
         self.folder = folder
         self.cfg = load_config(folder)
         self.tpl = load_templates(self.cfg.theme, folder / "templates")
         self.out = folder / "public"
-        self.posts = load_posts(folder, drafts)
-        self.pages = load_pages(folder, drafts)
+        highlight = self.cfg.highlight and render.HAVE_PYGMENTS
+        if self.cfg.highlight and not render.HAVE_PYGMENTS and self.cfg.highlight_style and log:
+            log("note: highlight_style is set but Pygments is not installed, so code "
+                "blocks are not highlighted (pip install \"sitegen[highlight]\")")
+        # Pygments CSS, added only to pages that contain a highlighted block.
+        self.highlight_css = render.highlight_css(
+            self.cfg.highlight_style or render.DEFAULT_STYLES[self.cfg.theme]) if highlight else ""
+        self.posts = load_posts(folder, drafts, highlight)
+        self.pages = load_pages(folder, drafts, highlight)
         self.tags: dict[str, tuple[str, list[Post]]] = {}
         for p in self.posts:
             for t in p.tags:
@@ -264,9 +288,12 @@ class Site:
         """Wrap content in base.html; ``feed_path`` is the folder of the feed to
         advertise (empty for the site feed, ``tags/<slug>/`` on tag pages)."""
         root = "../" * depth or "./"
+        css = self.tpl["css"]
+        if self.highlight_css and f'class="{render.HIGHLIGHT_CLASS}"' in content:
+            css += "\n" + self.highlight_css
         return fill(self.tpl["base"], {
             "title": esc(title), "site_title": esc(self.cfg.title), "root": root,
-            "feed_url": root + feed_path + "atom.xml", "css": self.tpl["css"], "content": content,
+            "feed_url": root + feed_path + "atom.xml", "css": css, "content": content,
             "nav": self.nav(root, current),
         })
 
@@ -388,8 +415,9 @@ class Site:
             shutil.copyfile(real, dest)
 
 
-def build(folder: Path, drafts: bool = False) -> Path:
+def build(folder: Path, drafts: bool = False, log=None) -> Path:
+    """Build the site; ``log`` (if given) receives non-fatal notes."""
     folder = Path(folder)
     if not folder.is_dir():
         raise BuildError(f"not a folder: {folder}")
-    return Site(folder, drafts).build()
+    return Site(folder, drafts, log).build()
