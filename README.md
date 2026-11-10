@@ -1,6 +1,6 @@
 # sitegen
 
-sitegen turns a folder of Markdown files with simple front matter into a static blog. It writes a `public/` folder with an index (newest first, paginated), one page per post, per-tag pages, standalone pages such as About and Contact, an Atom feed, a sitemap and your static assets.
+sitegen turns a folder of Markdown files with simple front matter into a static blog. It writes a `public/` folder with an index (newest first, paginated), one page per post, per-tag pages, standalone pages such as About and Contact, an Atom feed (plus one per tag), a sitemap and your static assets.
 
 ## Who it is for
 
@@ -117,11 +117,34 @@ $ grep -A8 '<ul class="posts">' public/tags/index.html
 <li><a class="tag" href="../tags/intro/">#intro</a> <span class="meta">1 post</span></li>
 <li><a class="tag" href="../tags/python/">#python</a> <span class="meta">1 post</span></li>
 </ul>
-$ grep pager public/tags/food/index.html
-<nav class="pager"><a href="../../tags/">All tags</a></nav>
 ```
 
 It uses the `list.html` template (`heading` is "Tags", `pager` is empty).
+
+### Per-tag feeds
+
+Each tag also gets its own Atom feed at `public/tags/<tag>/atom.xml`, so readers can
+follow just the topics they care about. It holds the same entries as the site feed
+narrowed to that tag (newest first, at most 20, drafts only with `--drafts`), is
+titled "Site title: #tag", and its `id` and alternate link point at the tag page.
+Tag pages advertise their own feed in `<link rel="alternate">` (the `feed_url`
+template variable) and add an "Atom feed" link next to "All tags"; every other page
+still points at the site feed. Feeds are not listed in `sitemap.xml`. Real output
+from a site made with `sitegen init` (whose two sample posts share the `notes` tag):
+
+```
+$ ls public/tags/*/atom.xml
+public/tags/garden/atom.xml
+public/tags/intro/atom.xml
+public/tags/notes/atom.xml
+$ grep "<title>" public/tags/notes/atom.xml
+  <title>My Sitegen Blog: #notes</title>
+    <title>Notes from the herb garden</title>
+    <title>Hello, world</title>
+$ grep -E "atom|pager" public/tags/notes/index.html
+<link rel="alternate" type="application/atom+xml" href="../../tags/notes/atom.xml">
+<nav class="pager"><a href="../../tags/">All tags</a> | <a class="feed" href="../../tags/notes/atom.xml">Atom feed</a></nav>
+```
 
 ### When something is wrong
 

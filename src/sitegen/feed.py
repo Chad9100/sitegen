@@ -17,14 +17,21 @@ def _tostring(root: ET.Element) -> str:
     return '<?xml version="1.0" encoding="utf-8"?>\n' + ET.tostring(root, encoding="unicode") + "\n"
 
 
-def build_atom(site_title: str, base_url: str, posts: list[dict], limit: int = 20) -> str:
-    """posts: dicts with title, url (absolute), date, summary, tags (newest first)."""
+def build_atom(site_title: str, base_url: str, posts: list[dict], limit: int = 20,
+               path: str = "") -> str:
+    """posts: dicts with title, url (absolute), date, summary, tags (newest first).
+
+    ``path`` is the folder the feed lives in, relative to the site root and
+    ending in "/" (``"tags/python/"`` for a tag feed); empty for the main feed.
+    The feed's id and alternate link point at that folder's page.
+    """
     ET.register_namespace("", ATOM)
     feed = ET.Element(f"{{{ATOM}}}feed")
+    page = f"{base_url}/{path}"
     ET.SubElement(feed, f"{{{ATOM}}}title").text = site_title
-    ET.SubElement(feed, f"{{{ATOM}}}id").text = base_url + "/"
-    ET.SubElement(feed, f"{{{ATOM}}}link", href=base_url + "/")
-    ET.SubElement(feed, f"{{{ATOM}}}link", href=base_url + "/atom.xml", rel="self")
+    ET.SubElement(feed, f"{{{ATOM}}}id").text = page
+    ET.SubElement(feed, f"{{{ATOM}}}link", href=page)
+    ET.SubElement(feed, f"{{{ATOM}}}link", href=page + "atom.xml", rel="self")
     latest = posts[0]["date"] if posts else datetime(1970, 1, 1, tzinfo=timezone.utc)
     ET.SubElement(feed, f"{{{ATOM}}}updated").text = _rfc3339(latest)
     for p in posts[:limit]:

@@ -259,11 +259,14 @@ class Site:
                 slug = slugify(t, "tag")
                 self.tags.setdefault(slug, (t, []))[1].append(p)
 
-    def page(self, title: str, content: str, depth: int, current: str = "") -> str:
+    def page(self, title: str, content: str, depth: int, current: str = "",
+             feed_path: str = "") -> str:
+        """Wrap content in base.html; ``feed_path`` is the folder of the feed to
+        advertise (empty for the site feed, ``tags/<slug>/`` on tag pages)."""
         root = "../" * depth or "./"
         return fill(self.tpl["base"], {
             "title": esc(title), "site_title": esc(self.cfg.title), "root": root,
-            "feed_url": root + "atom.xml", "css": self.tpl["css"], "content": content,
+            "feed_url": root + feed_path + "atom.xml", "css": self.tpl["css"], "content": content,
             "nav": self.nav(root, current),
         })
 
@@ -301,11 +304,13 @@ class Site:
                 nav.append(f'<a rel="next" href="{root}{base}page/{n + 1}/">Older</a>')
             if base.startswith("tags/"):
                 nav.append(f'<a href="{root}tags/">All tags</a>')
+                nav.append(f'<a class="feed" href="{root}{base}atom.xml">Atom feed</a>')
             pager = f'<nav class="pager">{" | ".join(nav)}</nav>' if nav else ""
             content = fill(self.tpl["list"], {"heading": esc(heading), "items": items,
                                               "pager": pager})
             rel = f"{base}index.html" if n == 1 else f"{base}page/{n}/index.html"
-            write(self.out, rel, self.page(heading, content, depth))
+            feed_path = base if base.startswith("tags/") else ""
+            write(self.out, rel, self.page(heading, content, depth, feed_path=feed_path))
 
     def tag_index(self) -> None:
         """``tags/index.html``: every tag with its post count, most used first."""
@@ -320,6 +325,15 @@ class Site:
             for slug, (name, plist) in ranked)
         content = fill(self.tpl["list"], {"heading": "Tags", "items": items, "pager": ""})
         write(self.out, "tags/index.html", self.page("Tags", content, 1))
+
+    def tag_feeds(self, feed_posts: list[dict]) -> None:
+        """``tags/<slug>/atom.xml``: the site feed narrowed to one tag's posts."""
+        by_url = {fp["url"]: fp for fp in feed_posts}
+        base = self.cfg.base_url
+        for slug, (name, plist) in self.tags.items():
+            entries = [by_url[f"{base}/posts/{p.slug}/"] for p in plist]
+            write(self.out, f"tags/{slug}/atom.xml", feed.build_atom(
+                f"{self.cfg.title}: #{name}", base, entries, path=f"tags/{slug}/"))
 
     def build(self) -> Path:
         if self.out.exists():
@@ -344,6 +358,7 @@ class Site:
         feed_posts = [{"title": p.title, "url": f"{base}/posts/{p.slug}/", "date": p.date,
                        "summary": p.summary, "tags": p.tags} for p in self.posts]
         write(self.out, "atom.xml", feed.build_atom(self.cfg.title, base, feed_posts))
+        self.tag_feeds(feed_posts)
         entries = [(base + "/", self.posts[0].date if self.posts else None)]
         entries += [(f"{base}/posts/{p.slug}/", p.date) for p in self.posts]
         entries += [(f"{base}/{pg.slug}/", None) for pg in self.pages]
